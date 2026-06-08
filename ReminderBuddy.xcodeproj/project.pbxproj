@@ -57,11 +57,22 @@
 		AA0000000000000000000012 /* ReminderBuddyWidget */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
+				AA00000000000000000000E1 /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
 			);
 			path = ReminderBuddyWidget;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		AA00000000000000000000E1 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = AA00000000000000000000D0 /* ReminderBuddyWidgetExtension */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		AA0000000000000000000020 /* Frameworks */ = {
