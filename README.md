@@ -95,21 +95,22 @@ ReminderBuddyWidget/                # Widget extension target
 
    - Select the **ReminderBuddy** target → **Signing & Capabilities**.
    - Choose your **Team**.
-   - The bundle ID is `com.reminderbuddy.app`. Change it to something unique to you
-     (e.g. `com.yourname.reminderbuddy`) if needed. **If you change it, also update:**
-     - The iCloud container in `ReminderBuddy.entitlements`
-       (`iCloud.<your.bundle.id>`), and
-     - `CloudKitService.containerIdentifier` in `Services/CloudKitService.swift` to match.
+   - The bundle ID is `com.reminderbuddyjp.app`. If you change it again, also update:
+     - The iCloud container in `ReminderBuddy.entitlements` (`iCloud.<your.bundle.id>`),
+     - `CloudKitService.containerIdentifier` in `Services/CloudKitService.swift`,
+     - The App Group in both `.entitlements` files and `WidgetSharedConstants.appGroup`
+       in `Shared/WidgetSharedData.swift`, and
+     - The widget bundle ID (`<your.bundle.id>.ReminderBuddyWidget`) in the project settings.
 
 3. **Confirm capabilities** (they're pre-wired in the entitlements file, but verify in
    *Signing & Capabilities*; add any that are missing with the **+ Capability** button):
 
    - **iCloud** → check **CloudKit**, and make sure the container
-     `iCloud.com.reminderbuddy.app` (or your renamed one) is selected/created.
+     `iCloud.com.reminderbuddyjp.app` (or your renamed one) is selected/created.
    - **Push Notifications**.
    - **Background Modes** → **Remote notifications** (already set in `Info.plist`).
    - **Sign in with Apple**.
-   - **App Groups** → `group.com.reminderbuddy.app`, enabled on **both** the app target and
+   - **App Groups** → `group.com.reminderbuddyjp.app`, enabled on **both** the app target and
      the **ReminderBuddyWidgetExtension** target (this is how the widget reads the data the
      app publishes). If you rename it, update `WidgetSharedConstants.appGroup` in
      `Shared/WidgetSharedData.swift` and both `.entitlements` files to match.

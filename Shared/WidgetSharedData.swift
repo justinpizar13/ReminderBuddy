@@ -6,7 +6,7 @@ import Foundation
 
 /// Identifiers shared by the app and the widget.
 enum WidgetSharedConstants {
-    static let appGroup = "group.com.reminderbuddy.app"
+    static let appGroup = "group.com.reminderbuddyjp.app"
     static let snapshotFilename = "widget-snapshot.json"
     static let widgetKind = "ReminderBuddyWidget"
 }

@@ -10,7 +10,7 @@
 	<true/>
 	<key>NSUserActivityTypes</key>
 	<array>
-		<string>com.reminderbuddy.app.task</string>
+		<string>com.reminderbuddyjp.app.task</string>
 	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>

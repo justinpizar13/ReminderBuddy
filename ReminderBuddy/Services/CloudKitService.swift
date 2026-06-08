@@ -35,7 +35,7 @@ final class CloudKitService {
     static let shared = CloudKitService()
 
     // Update this if you change the container identifier in the entitlements file.
-    static let containerIdentifier = "iCloud.com.reminderbuddy.app"
+    static let containerIdentifier = "iCloud.com.reminderbuddyjp.app"
 
     let container: CKContainer
     let privateDB: CKDatabase
@@ -44,7 +44,7 @@ final class CloudKitService {
     static let zoneName = "ReminderBuddyZone"
     let zoneID: CKRecordZone.ID
 
-    private let log = Logger(subsystem: "com.reminderbuddy.app", category: "CloudKit")
+    private let log = Logger(subsystem: "com.reminderbuddyjp.app", category: "CloudKit")
 
     private init() {
         container = CKContainer(identifier: Self.containerIdentifier)
