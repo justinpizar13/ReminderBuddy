@@ -28,20 +28,22 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    shareStatusRows
+
                     Button {
                         prepareShare()
                     } label: {
                         if preparingShare {
                             HStack { ProgressView(); Text("Preparing invite…") }
                         } else {
-                            Label("Invite Your Partner", systemImage: "person.crop.circle.badge.plus")
+                            Label(inviteButtonTitle, systemImage: "person.crop.circle.badge.plus")
                         }
                     }
                     .disabled(preparingShare)
                 } header: {
                     Text("Sharing")
                 } footer: {
-                    Text("Send an invite to share this list. Once they accept, you'll both see and edit the same reminders.")
+                    Text(shareFooterText)
                 }
 
                 Section {
@@ -102,14 +104,93 @@ struct SettingsView: View {
             } message: {
                 Text("This is how your partner will see your activity.")
             }
-            .sheet(item: $shareItem) { wrapper in
+            .sheet(item: $shareItem, onDismiss: {
+                // After managing the share, refresh in case invitees changed.
+                Task { await store.refreshShareStatus() }
+            }) { wrapper in
                 CloudSharingView(share: wrapper.share, container: wrapper.container)
                     .ignoresSafeArea()
             }
-            .task { await notifications.refreshAuthorizationStatus() }
+            .task {
+                await notifications.refreshAuthorizationStatus()
+                await store.refreshShareStatus()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .didAcceptCloudKitShare)) { _ in
+                Task { await store.refreshShareStatus() }
+            }
             .onChange(of: summaryPrefs.isEnabled) { _, _ in store.rescheduleDailySummaries() }
             .onChange(of: summaryPrefs.hour) { _, _ in store.rescheduleDailySummaries() }
             .onChange(of: summaryPrefs.minute) { _, _ in store.rescheduleDailySummaries() }
+        }
+    }
+
+    // MARK: Sharing status UI
+
+    @ViewBuilder
+    private var shareStatusRows: some View {
+        let status = store.shareStatus
+        switch status.role {
+        case .notShared:
+            Label {
+                Text("Not shared yet")
+            } icon: {
+                Image(systemName: "person.crop.circle.badge.xmark")
+                    .foregroundStyle(.secondary)
+            }
+            .foregroundStyle(.secondary)
+
+        case .owner, .participant:
+            HStack {
+                Label {
+                    Text(status.role == .owner ? "You're sharing this list" : "Shared with you")
+                } icon: {
+                    Image(systemName: "checkmark.seal.fill")
+                        .foregroundStyle(.green)
+                }
+                Spacer()
+            }
+
+            ForEach(status.members) { member in
+                HStack {
+                    Image(systemName: member.isOwner ? "crown.fill" : "person.fill")
+                        .foregroundStyle(member.isOwner ? .yellow : .blue)
+                        .frame(width: 22)
+                    Text(member.isYou ? "\(member.name) (you)" : member.name)
+                    Spacer()
+                    if member.hasAccepted {
+                        Text(member.isOwner ? "Owner" : "Active")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("Pending")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+                }
+            }
+        }
+    }
+
+    private var inviteButtonTitle: String {
+        switch store.shareStatus.role {
+        case .notShared: return "Invite Your Partner"
+        case .owner: return "Manage Sharing"
+        case .participant: return "View Sharing"
+        }
+    }
+
+    private var shareFooterText: String {
+        switch store.shareStatus.role {
+        case .notShared:
+            return "Send an invite to share this list. Once they accept, you'll both see and edit the same reminders."
+        case .owner:
+            let pending = store.shareStatus.pendingPartners.count
+            if pending > 0 {
+                return "Your invite is waiting to be accepted. Tap Manage Sharing to resend or add people."
+            }
+            return "You're sharing this list. Tap Manage Sharing to add people or change access."
+        case .participant:
+            return "You're viewing a list shared with you. Changes you make are visible to everyone on the list."
         }
     }
 

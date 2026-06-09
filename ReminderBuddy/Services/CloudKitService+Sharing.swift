@@ -1,9 +1,95 @@
 import Foundation
 import CloudKit
 
+// MARK: - Share status
+
+/// A friendly summary of the current sharing state, for display in Settings.
+struct ShareStatus: Equatable {
+    enum Role: Equatable {
+        case notShared          // No share exists yet.
+        case owner              // You created the share.
+        case participant        // You accepted someone else's share.
+    }
+
+    struct Member: Equatable, Identifiable {
+        let id: String
+        let name: String
+        let isYou: Bool
+        let isOwner: Bool
+        /// True once the person has accepted the invite (vs. still pending).
+        let hasAccepted: Bool
+    }
+
+    var role: Role
+    var members: [Member]
+
+    /// People other than yourself who have accepted — i.e. you're actively sharing.
+    var acceptedPartners: [Member] {
+        members.filter { !$0.isYou && $0.hasAccepted }
+    }
+
+    /// People invited but who haven't accepted yet.
+    var pendingPartners: [Member] {
+        members.filter { !$0.isYou && !$0.hasAccepted }
+    }
+
+    static let notShared = ShareStatus(role: .notShared, members: [])
+}
+
 // MARK: - Sharing & subscriptions
 
 extension CloudKitService {
+
+    /// Returns the current sharing state: whether a share exists, your role, and the
+    /// list of participants with their acceptance status. Safe to call for both the
+    /// owner (reads the private DB) and an invited participant (reads the shared DB).
+    func shareStatus() async -> ShareStatus {
+        // Are we a participant? If the zone shows up in the shared DB, someone shared
+        // it with us.
+        if let sharedShare = await fetchSharedZoneShare() {
+            return makeStatus(from: sharedShare, role: .participant)
+        }
+
+        // Otherwise, do we own a share?
+        if let ownedShare = try? await existingZoneShare() {
+            return makeStatus(from: ownedShare, role: .owner)
+        }
+
+        return .notShared
+    }
+
+    /// On the participant side, locate the accepted share living in the shared database.
+    private func fetchSharedZoneShare() async -> CKShare? {
+        do {
+            let zones = try await sharedDB.allRecordZones()
+            guard let zone = zones.first(where: { $0.zoneID.zoneName == Self.zoneName }) else {
+                return nil
+            }
+            let shareID = CKRecord.ID(recordName: CKRecordNameZoneWideShare, zoneID: zone.zoneID)
+            return try await sharedDB.record(for: shareID) as? CKShare
+        } catch {
+            return nil
+        }
+    }
+
+    private func makeStatus(from share: CKShare, role: ShareStatus.Role) -> ShareStatus {
+        let members: [ShareStatus.Member] = share.participants.map { participant in
+            let nameComponents = participant.userIdentity.nameComponents
+            let formatted = nameComponents.map {
+                PersonNameComponentsFormatter().string(from: $0)
+            } ?? ""
+            let displayName = formatted.isEmpty
+                ? (participant.role == .owner ? "Owner" : "Partner")
+                : formatted
+            return ShareStatus.Member(
+                id: participant.userIdentity.userRecordID?.recordName ?? UUID().uuidString,
+                name: displayName,
+                isYou: participant.userIdentity.userRecordID == share.currentUserParticipant?.userIdentity.userRecordID,
+                isOwner: participant.role == .owner,
+                hasAccepted: participant.acceptanceStatus == .accepted)
+        }
+        return ShareStatus(role: role, members: members)
+    }
 
     /// Creates (or returns the existing) zone-wide CKShare for the reminders zone, which
     /// shares EVERY record in the zone (categories, tasks, notes) with the partner — not

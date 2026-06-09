@@ -15,6 +15,7 @@ final class TaskStore: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published private(set) var isReady = false
+    @Published private(set) var shareStatus: ShareStatus = .notShared
 
     private let cloud = CloudKitService.shared
     private let notifications = NotificationManager.shared
@@ -42,9 +43,15 @@ final class TaskStore: ObservableObject {
             try await cloud.bootstrap()
             isReady = true
             await refresh(announceChanges: false)
+            await refreshShareStatus()
         } catch {
             errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
+    }
+
+    /// Reloads who the list is shared with (owner/participant + members).
+    func refreshShareStatus() async {
+        shareStatus = await cloud.shareStatus()
     }
 
     /// Refetches everything. When `announceChanges` is true (i.e. triggered by a push),
@@ -62,6 +69,10 @@ final class TaskStore: ObservableObject {
             reconcileDueReminders()
             hasLoadedOnce = true
             errorMessage = nil
+            if announceChanges {
+                // A push arrived; a partner may have just accepted the invite.
+                await refreshShareStatus()
+            }
         } catch {
             errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
