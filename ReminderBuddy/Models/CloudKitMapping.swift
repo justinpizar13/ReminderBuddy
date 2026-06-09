@@ -27,20 +27,28 @@ extension TaskCategory {
 }
 
 extension ReminderTask {
+    /// Sentinel for an absent due date. We always write the `dueDate` field (rather than
+    /// omitting it for nil) so CloudKit registers the field in the schema on the very first
+    /// save — otherwise the field never lands in the locked Production schema and a later
+    /// save that *does* set a due date is rejected with "Cannot create or modify field…".
+    /// Optional string fields use "" for the same reason.
+    fileprivate static let noDueDateSentinel = Date(timeIntervalSince1970: 0)
+
     func toRecord(in zoneID: CKRecordZone.ID) -> CKRecord {
         let recordID = CKRecord.ID(recordName: id, zoneID: zoneID)
         let record = CKRecord(recordType: ReminderTask.recordType, recordID: recordID)
         record["title"] = title as CKRecordValue
         record["details"] = details as CKRecordValue
         record["isComplete"] = (isComplete ? 1 : 0) as CKRecordValue
-        if let dueDate { record["dueDate"] = dueDate as CKRecordValue }
-        if let categoryID { record["categoryID"] = categoryID as CKRecordValue }
-        if let assignedTo { record["assignedTo"] = assignedTo as CKRecordValue }
+        // Every field is always written so the full schema registers on first save.
+        record["dueDate"] = (dueDate ?? Self.noDueDateSentinel) as CKRecordValue
+        record["categoryID"] = (categoryID ?? "") as CKRecordValue
+        record["assignedTo"] = (assignedTo ?? "") as CKRecordValue
         record["recurrence"] = recurrence.rawValue as CKRecordValue
         record["createdByName"] = createdByName as CKRecordValue
         record["createdByID"] = createdByID as CKRecordValue
         record["lastModifiedByName"] = lastModifiedByName as CKRecordValue
-        if let completedByName { record["completedByName"] = completedByName as CKRecordValue }
+        record["completedByName"] = (completedByName ?? "") as CKRecordValue
         record["createdAt"] = createdAt as CKRecordValue
         record["updatedAt"] = updatedAt as CKRecordValue
         return record
@@ -52,14 +60,19 @@ extension ReminderTask {
         self.title = record["title"] as? String ?? ""
         self.details = record["details"] as? String ?? ""
         self.isComplete = (record["isComplete"] as? Int ?? 0) == 1
-        self.dueDate = record["dueDate"] as? Date
-        self.categoryID = record["categoryID"] as? String
-        self.assignedTo = record["assignedTo"] as? String
+        // Map sentinels back to nil. distantPast / epoch-0 means "no due date".
+        if let due = record["dueDate"] as? Date, due > Self.noDueDateSentinel {
+            self.dueDate = due
+        } else {
+            self.dueDate = nil
+        }
+        self.categoryID = (record["categoryID"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        self.assignedTo = (record["assignedTo"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         self.recurrence = Recurrence(rawValue: record["recurrence"] as? String ?? "") ?? .none
         self.createdByName = record["createdByName"] as? String ?? ""
         self.createdByID = record["createdByID"] as? String ?? ""
         self.lastModifiedByName = record["lastModifiedByName"] as? String ?? ""
-        self.completedByName = record["completedByName"] as? String
+        self.completedByName = (record["completedByName"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         self.createdAt = record["createdAt"] as? Date ?? Date()
         self.updatedAt = record["updatedAt"] as? Date ?? Date()
     }
