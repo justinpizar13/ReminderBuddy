@@ -10,44 +10,45 @@ extension CloudKitService {
 
     // MARK: Fetch
 
+    /// Loads the full current contents of the synced zone.
+    ///
+    /// Uses `recordZoneChanges(inZoneWith:since:)` (the zone-change API) rather than
+    /// `CKQuery`. Passing `since: nil` returns every live record in the zone, and unlike
+    /// queries this path requires **no Queryable indexes** in the CloudKit schema — which
+    /// is why it avoids the "field 'recordName' is not marked queryable" failure in the
+    /// locked Production environment.
     func fetchAll() async throws -> (categories: [TaskCategory], tasks: [ReminderTask], notes: [TaskNote]) {
         let db = await activeDatabase()
         let zone = await activeZoneID()
+        let records = try await fetchAllRecords(in: db, zone: zone)
 
-        async let categoriesRecords = fetchRecords(ofType: TaskCategory.recordType, in: db, zone: zone)
-        async let taskRecords = fetchRecords(ofType: ReminderTask.recordType, in: db, zone: zone)
-        async let noteRecords = fetchRecords(ofType: TaskNote.recordType, in: db, zone: zone)
-
-        let categories = try await categoriesRecords.compactMap { TaskCategory(record: $0) }
+        let categories = records
+            .compactMap { TaskCategory(record: $0) }
             .sorted { $0.sortIndex < $1.sortIndex }
-        let tasks = try await taskRecords.compactMap { ReminderTask(record: $0) }
-        let notes = try await noteRecords.compactMap { TaskNote(record: $0) }
+        let tasks = records.compactMap { ReminderTask(record: $0) }
+        let notes = records
+            .compactMap { TaskNote(record: $0) }
             .sorted { $0.createdAt < $1.createdAt }
 
         return (categories, tasks, notes)
     }
 
-    private func fetchRecords(ofType type: String,
-                              in db: CKDatabase,
-                              zone: CKRecordZone.ID) async throws -> [CKRecord] {
-        let query = CKQuery(recordType: type, predicate: NSPredicate(value: true))
+    /// Fetches every record currently in the zone via the change-tracking API, following
+    /// `moreComing` pages. Starts from a nil token, so it returns the complete set.
+    private func fetchAllRecords(in db: CKDatabase, zone: CKRecordZone.ID) async throws -> [CKRecord] {
         var collected: [CKRecord] = []
-        var cursor: CKQueryOperation.Cursor?
+        var token: CKServerChangeToken?
 
         repeat {
-            let result: (matchResults: [(CKRecord.ID, Result<CKRecord, Error>)], queryCursor: CKQueryOperation.Cursor?)
-            if let cursor {
-                result = try await db.records(continuingMatchFrom: cursor)
-            } else {
-                result = try await db.records(matching: query, inZoneWith: zone)
-            }
-            for (_, recordResult) in result.matchResults {
-                if case .success(let record) = recordResult {
-                    collected.append(record)
+            let result = try await db.recordZoneChanges(inZoneWith: zone, since: token)
+            for (_, modificationResult) in result.modificationResultsByID {
+                if case .success(let modification) = modificationResult {
+                    collected.append(modification.record)
                 }
             }
-            cursor = result.queryCursor
-        } while cursor != nil
+            token = result.changeToken
+            if !result.moreComing { break }
+        } while true
 
         return collected
     }
