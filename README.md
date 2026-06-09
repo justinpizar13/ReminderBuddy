@@ -132,10 +132,13 @@ ReminderBuddyWidget/                # Widget extension target
    | `ReminderTask`| `title` (String), `details` (String), `isComplete` (Int64), `dueDate` (Date/Time), `categoryID` (String), `assignedTo` (String), `recurrence` (String), `createdByName` (String), `createdByID` (String), `lastModifiedByName` (String), `completedByName` (String), `createdAt` (Date/Time), `updatedAt` (Date/Time) |
    | `TaskNote`    | `taskID` (String), `body` (String), `authorName` (String), `authorID` (String), `createdAt` (Date/Time) |
    | `Category`    | `name` (String), `colorHex` (String), `sortIndex` (Int64) |
-   | `ShareAnchor` | `title` (String) |
+
+   Sharing uses a **zone-wide `CKShare`** on the `ReminderBuddyZone` custom zone, so the
+   entire dataset (categories, tasks, notes) is shared with the partner at once.
 
    > After testing in Development, use **Deploy Schema to Production** in the CloudKit
-   > Console before you ship to the App Store / TestFlight.
+   > Console before you ship to the App Store / TestFlight. TestFlight builds use the
+   > **Production** CloudKit environment, so the schema must be deployed there first.
 
 5. **Build & run on your iPhone.**
 
