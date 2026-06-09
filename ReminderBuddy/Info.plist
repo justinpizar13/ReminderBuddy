@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	    Required for iOS to recognize the app as a valid handler for CKShare
+	    invite URLs. Without this literal key in the built Info.plist, the
+	    recipient sees "You need a newer version of Reminder Buddy to open
+	    this…" — even on the same build — because iOS's share-acceptance
+	    dispatcher only inspects this flag. Declared as a literal key (not an
+	    INFOPLIST_KEY_ build setting) so it is guaranteed to reach the binary.
+	-->
+	<key>CKSharingSupported</key>
+	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+</dict>
+</plist>
