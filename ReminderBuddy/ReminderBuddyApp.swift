@@ -2,6 +2,11 @@ import SwiftUI
 import CloudKit
 import UIKit
 
+extension Notification.Name {
+    /// Posted after a CloudKit share invitation is accepted, so the UI can reload.
+    static let didAcceptCloudKitShare = Notification.Name("ReminderBuddy.didAcceptCloudKitShare")
+}
+
 @main
 struct ReminderBuddyApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
@@ -31,6 +36,11 @@ struct ReminderBuddyApp: App {
                     auth.revalidateCredentialState()
                     await notifications.refreshAuthorizationStatus()
                 }
+                .onReceive(NotificationCenter.default.publisher(for: .didAcceptCloudKitShare)) { _ in
+                    // The partner just accepted an invite (handled by the scene delegate);
+                    // reload so the shared zone's data appears.
+                    Task { await store.start() }
+                }
         }
     }
 }
@@ -51,6 +61,20 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         application.registerForRemoteNotifications()
         return true
+    }
+
+    // MARK: Scene configuration
+    //
+    // SwiftUI-lifecycle apps route CloudKit share acceptance to the *scene* delegate,
+    // not the app delegate. We supply a UISceneConfiguration whose delegate is our
+    // SceneDelegate so `windowScene(_:userDidAcceptCloudKitShareWith:)` actually fires.
+
+    func application(_ application: UIApplication,
+                     configurationForConnecting connectingSceneSession: UISceneSession,
+                     options: UIScene.ConnectionOptions) -> UISceneConfiguration {
+        let configuration = UISceneConfiguration(name: nil, sessionRole: connectingSceneSession.role)
+        configuration.delegateClass = SceneDelegate.self
+        return configuration
     }
 
     // MARK: Remote notifications (CloudKit pushes)
@@ -74,17 +98,39 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
                      didFailToRegisterForRemoteNotificationsWithError error: Error) {
         // Push won't work on the Simulator; this is expected there.
     }
+}
 
-    // MARK: Share acceptance (partner tapped the invite link)
+// MARK: - Scene delegate (CloudKit share acceptance)
 
-    func application(_ application: UIApplication,
+/// Handles the partner tapping an invite link. iOS delivers share metadata here — to the
+/// active scene's delegate — for SwiftUI-lifecycle apps. We accept the share via CloudKit
+/// and post a notification so the app reloads the now-shared data.
+final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
+
+    /// Cold launch: the app wasn't running when the user tapped the invite, so the
+    /// metadata arrives in the connection options.
+    func scene(_ scene: UIScene,
+               willConnectTo session: UISceneSession,
+               options connectionOptions: UIScene.ConnectionOptions) {
+        if let metadata = connectionOptions.cloudKitShareMetadata {
+            accept(metadata)
+        }
+    }
+
+    /// Warm path: the app was already running when the user tapped the invite.
+    func windowScene(_ windowScene: UIWindowScene,
                      userDidAcceptCloudKitShareWith cloudKitShareMetadata: CKShare.Metadata) {
+        accept(cloudKitShareMetadata)
+    }
+
+    private func accept(_ metadata: CKShare.Metadata) {
         Task { @MainActor in
             do {
-                try await CloudKitService.shared.accept(cloudKitShareMetadata)
-                await store?.start()
+                try await CloudKitService.shared.accept(metadata)
+                NotificationCenter.default.post(name: .didAcceptCloudKitShare, object: nil)
             } catch {
-                store?.errorMessage = error.localizedDescription
+                // Surface acceptance failures the next time the app fetches; the user can retry.
+                NSLog("CloudKit share acceptance failed: \(error.localizedDescription)")
             }
         }
     }
