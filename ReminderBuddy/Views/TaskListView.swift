@@ -118,14 +118,21 @@ struct TaskRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            Button {
-                Task { await store.toggleComplete(task) }
-            } label: {
-                Image(systemName: task.isComplete ? "checkmark.circle.fill" : "circle")
+            if task.kind == .event {
+                // Events aren't completable — show a non-interactive marker instead.
+                Image(systemName: "calendar.circle.fill")
                     .font(.title3)
-                    .foregroundStyle(task.isComplete ? Color.green : Color.secondary)
+                    .foregroundStyle(Color.accentColor)
+            } else {
+                Button {
+                    Task { await store.toggleComplete(task) }
+                } label: {
+                    Image(systemName: task.isComplete ? "checkmark.circle.fill" : "circle")
+                        .font(.title3)
+                        .foregroundStyle(task.isComplete ? Color.green : Color.secondary)
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(task.title)

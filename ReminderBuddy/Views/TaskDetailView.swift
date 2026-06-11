@@ -17,14 +17,20 @@ struct TaskDetailView: View {
             // Header
             Section {
                 HStack(alignment: .top, spacing: 12) {
-                    Button {
-                        Task { await store.toggleComplete(task) }
-                    } label: {
-                        Image(systemName: task.isComplete ? "checkmark.circle.fill" : "circle")
+                    if task.kind == .event {
+                        Image(systemName: "calendar.circle.fill")
                             .font(.title)
-                            .foregroundStyle(task.isComplete ? .green : .secondary)
+                            .foregroundStyle(Color.accentColor)
+                    } else {
+                        Button {
+                            Task { await store.toggleComplete(task) }
+                        } label: {
+                            Image(systemName: task.isComplete ? "checkmark.circle.fill" : "circle")
+                                .font(.title)
+                                .foregroundStyle(task.isComplete ? .green : .secondary)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
 
                     VStack(alignment: .leading, spacing: 6) {
                         Text(task.title)
@@ -49,8 +55,12 @@ struct TaskDetailView: View {
                             .foregroundStyle(Color(hex: category.colorHex))
                     }
                 }
+                LabeledContent("Type") {
+                    Label(task.kind.label, systemImage: task.kind.systemImage)
+                }
                 if let due = task.dueDate {
-                    LabeledContent("Due", value: due.formatted(date: .abbreviated, time: .shortened))
+                    LabeledContent(task.kind == .event ? "Date" : "Due",
+                                   value: due.formatted(date: .abbreviated, time: .shortened))
                 }
                 if task.recurrence.isRepeating {
                     LabeledContent("Repeats") {
@@ -100,7 +110,7 @@ struct TaskDetailView: View {
                 }
             }
         }
-        .navigationTitle("Reminder")
+        .navigationTitle(task.kind.label)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {

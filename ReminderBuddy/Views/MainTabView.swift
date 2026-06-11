@@ -9,8 +9,8 @@ struct MainTabView: View {
                 .tabItem { Label("Upcoming", systemImage: "calendar") }
                 .badge(store.dueSoonCount())
 
-            TaskListView()
-                .tabItem { Label("Reminders", systemImage: "checklist") }
+            SharedInfoView()
+                .tabItem { Label("Info", systemImage: "info.circle") }
 
             CalendarView()
                 .tabItem { Label("Calendar", systemImage: "calendar.day.timeline.left") }

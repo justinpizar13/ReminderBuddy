@@ -43,8 +43,10 @@ final class NotificationManager: NSObject, ObservableObject {
         guard let dueDate = task.dueDate, dueDate > Date(), !task.isComplete else { return }
 
         let content = UNMutableNotificationContent()
-        content.title = "Reminder: \(task.title)"
-        content.body = task.details.isEmpty ? "This task is due." : task.details
+        content.title = task.kind == .event ? "Event: \(task.title)" : "Reminder: \(task.title)"
+        content.body = task.details.isEmpty
+            ? (task.kind == .event ? "This event is coming up." : "This task is due.")
+            : task.details
         content.sound = .default
         content.threadIdentifier = "due-reminders"
 

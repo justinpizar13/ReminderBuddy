@@ -13,6 +13,7 @@ struct TaskEditorView: View {
 
     let mode: Mode
 
+    @State private var kind: ItemKind = .reminder
     @State private var title = ""
     @State private var details = ""
     @State private var hasDueDate = false
@@ -26,6 +27,8 @@ struct TaskEditorView: View {
         return false
     }
 
+    private var isEvent: Bool { kind == .event }
+
     private var canSave: Bool {
         !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
@@ -34,26 +37,42 @@ struct TaskEditorView: View {
         NavigationStack {
             Form {
                 Section {
+                    Picker("Type", selection: $kind.animation()) {
+                        ForEach(ItemKind.allCases) { itemKind in
+                            Text(itemKind.label).tag(itemKind)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                } footer: {
+                    Text(isEvent
+                         ? "An event is something you're reminded of — there's nothing to check off."
+                         : "A reminder is a to-do you check off when it's done.")
+                }
+
+                Section {
                     TextField("Title", text: $title, axis: .vertical)
                     TextField("Notes (optional)", text: $details, axis: .vertical)
                         .lineLimit(1...5)
                 }
 
                 Section {
-                    Toggle("Due date", isOn: $hasDueDate.animation())
+                    Toggle(isEvent ? "Set date" : "Due date", isOn: $hasDueDate.animation())
                     if hasDueDate {
                         DatePicker("Date", selection: $dueDate)
                             .datePickerStyle(.compact)
-                        Picker("Repeat", selection: $recurrence) {
-                            ForEach(Recurrence.allCases) { rule in
-                                Text(rule.label).tag(rule)
+                        // Recurrence only applies to reminders (they recur when completed).
+                        if !isEvent {
+                            Picker("Repeat", selection: $recurrence) {
+                                ForEach(Recurrence.allCases) { rule in
+                                    Text(rule.label).tag(rule)
+                                }
                             }
                         }
                     }
                 } header: {
                     Text("When")
                 } footer: {
-                    if hasDueDate && recurrence.isRepeating {
+                    if hasDueDate && !isEvent && recurrence.isRepeating {
                         Text("When you mark this complete, the next \(recurrence.label.lowercased()) occurrence is created automatically.")
                     }
                 }
@@ -80,7 +99,7 @@ struct TaskEditorView: View {
                     }
                 }
             }
-            .navigationTitle(isEditing ? "Edit Reminder" : "New Reminder")
+            .navigationTitle(navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -95,6 +114,19 @@ struct TaskEditorView: View {
                 // Recurrence is meaningless without a due date.
                 if !hasDue { recurrence = .none }
             }
+            .onChange(of: kind) { _, newKind in
+                // Events don't recur on completion.
+                if newKind == .event { recurrence = .none }
+            }
+        }
+    }
+
+    private var navigationTitle: String {
+        switch (isEditing, isEvent) {
+        case (true, true):   return "Edit Event"
+        case (true, false):  return "Edit Reminder"
+        case (false, true):  return "New Event"
+        case (false, false): return "New Reminder"
         }
     }
 
@@ -113,6 +145,7 @@ struct TaskEditorView: View {
         case .create(let defaultCategoryID):
             categoryID = defaultCategoryID
         case .edit(let task):
+            kind = task.kind
             title = task.title
             details = task.details
             if let due = task.dueDate {
@@ -129,25 +162,30 @@ struct TaskEditorView: View {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedDetails = details.trimmingCharacters(in: .whitespacesAndNewlines)
         let due = hasDueDate ? dueDate : nil
-        let rule = hasDueDate ? recurrence : .none
+        // Events never recur on completion, so force recurrence off for them.
+        let rule = (hasDueDate && !isEvent) ? recurrence : .none
 
         Task {
             switch mode {
             case .create:
                 await store.addTask(title: trimmedTitle,
                                     details: trimmedDetails,
+                                    kind: kind,
                                     dueDate: due,
                                     categoryID: categoryID,
                                     assignedTo: assignedTo,
                                     recurrence: rule)
             case .edit(let original):
                 var updated = original
+                updated.kind = kind
                 updated.title = trimmedTitle
                 updated.details = trimmedDetails
                 updated.dueDate = due
                 updated.categoryID = categoryID
                 updated.assignedTo = assignedTo
                 updated.recurrence = rule
+                // An event that has been switched from a reminder shouldn't stay "complete".
+                if kind == .event { updated.isComplete = false; updated.completedByName = nil }
                 await store.updateTask(updated)
             }
             dismiss()

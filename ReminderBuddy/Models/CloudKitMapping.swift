@@ -39,6 +39,7 @@ extension ReminderTask {
         let record = CKRecord(recordType: ReminderTask.recordType, recordID: recordID)
         record["title"] = title as CKRecordValue
         record["details"] = details as CKRecordValue
+        record["kind"] = kind.rawValue as CKRecordValue
         record["isComplete"] = (isComplete ? 1 : 0) as CKRecordValue
         // Every field is always written so the full schema registers on first save.
         record["dueDate"] = (dueDate ?? Self.noDueDateSentinel) as CKRecordValue
@@ -59,6 +60,9 @@ extension ReminderTask {
         self.id = record.recordID.recordName
         self.title = record["title"] as? String ?? ""
         self.details = record["details"] as? String ?? ""
+        // Older records (saved before the event/reminder split) have no `kind` field;
+        // they default to `.reminder` so they keep their completion behavior.
+        self.kind = ItemKind(rawValue: record["kind"] as? String ?? "") ?? .reminder
         self.isComplete = (record["isComplete"] as? Int ?? 0) == 1
         // Map sentinels back to nil. distantPast / epoch-0 means "no due date".
         if let due = record["dueDate"] as? Date, due > Self.noDueDateSentinel {
@@ -98,5 +102,49 @@ extension TaskNote {
         self.authorName = record["authorName"] as? String ?? ""
         self.authorID = record["authorID"] as? String ?? ""
         self.createdAt = record["createdAt"] as? Date ?? Date()
+    }
+}
+
+extension SharedInfoItem {
+    /// Sentinel for "no monthly price". We always write the field (using -1 for nil) so
+    /// the field registers in the schema on the first save — same reasoning as
+    /// `ReminderTask`'s due-date sentinel.
+    fileprivate static let noPriceSentinel: Double = -1
+
+    func toRecord(in zoneID: CKRecordZone.ID) -> CKRecord {
+        let recordID = CKRecord.ID(recordName: id, zoneID: zoneID)
+        let record = CKRecord(recordType: SharedInfoItem.recordType, recordID: recordID)
+        record["title"] = title as CKRecordValue
+        record["detail"] = detail as CKRecordValue
+        record["link"] = link as CKRecordValue
+        record["accountNumber"] = accountNumber as CKRecordValue
+        record["monthlyPrice"] = (monthlyPrice ?? Self.noPriceSentinel) as CKRecordValue
+        record["sortIndex"] = sortIndex as CKRecordValue
+        record["createdByName"] = createdByName as CKRecordValue
+        record["createdByID"] = createdByID as CKRecordValue
+        record["lastModifiedByName"] = lastModifiedByName as CKRecordValue
+        record["createdAt"] = createdAt as CKRecordValue
+        record["updatedAt"] = updatedAt as CKRecordValue
+        return record
+    }
+
+    init?(record: CKRecord) {
+        guard record.recordType == SharedInfoItem.recordType else { return nil }
+        self.id = record.recordID.recordName
+        self.title = record["title"] as? String ?? ""
+        self.detail = record["detail"] as? String ?? ""
+        self.link = record["link"] as? String ?? ""
+        self.accountNumber = record["accountNumber"] as? String ?? ""
+        if let price = record["monthlyPrice"] as? Double, price >= 0 {
+            self.monthlyPrice = price
+        } else {
+            self.monthlyPrice = nil
+        }
+        self.sortIndex = record["sortIndex"] as? Int ?? 0
+        self.createdByName = record["createdByName"] as? String ?? ""
+        self.createdByID = record["createdByID"] as? String ?? ""
+        self.lastModifiedByName = record["lastModifiedByName"] as? String ?? ""
+        self.createdAt = record["createdAt"] as? Date ?? Date()
+        self.updatedAt = record["updatedAt"] as? Date ?? Date()
     }
 }

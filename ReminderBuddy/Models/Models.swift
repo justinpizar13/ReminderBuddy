@@ -73,6 +73,35 @@ enum Recurrence: String, CaseIterable, Identifiable, Hashable {
     }
 }
 
+// MARK: - ItemKind
+
+/// Whether an item is a to-do you complete, or an event you're simply reminded of.
+/// Events still appear in Upcoming/Calendar by date, but have no completion checkbox
+/// and never recur-on-complete.
+enum ItemKind: String, CaseIterable, Identifiable, Hashable {
+    case reminder
+    case event
+
+    var id: String { rawValue }
+
+    /// Title used for pickers and segmented controls.
+    var label: String {
+        switch self {
+        case .reminder: return "Reminder"
+        case .event:    return "Event"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .reminder: return "checklist"
+        case .event:    return "calendar"
+        }
+    }
+
+    var isEvent: Bool { self == .event }
+}
+
 // MARK: - ReminderTask
 
 /// A shared task/reminder.
@@ -80,6 +109,7 @@ struct ReminderTask: Identifiable, Hashable {
     var id: String              // recordName of the CKRecord
     var title: String
     var details: String
+    var kind: ItemKind          // a completable reminder, or an event you're reminded of
     var isComplete: Bool
     var dueDate: Date?
     var categoryID: String?     // recordName of the owning Category, if any
@@ -99,6 +129,7 @@ struct ReminderTask: Identifiable, Hashable {
     init(id: String = UUID().uuidString,
          title: String,
          details: String = "",
+         kind: ItemKind = .reminder,
          isComplete: Bool = false,
          dueDate: Date? = nil,
          categoryID: String? = nil,
@@ -113,6 +144,7 @@ struct ReminderTask: Identifiable, Hashable {
         self.id = id
         self.title = title
         self.details = details
+        self.kind = kind
         self.isComplete = isComplete
         self.dueDate = dueDate
         self.categoryID = categoryID
@@ -152,6 +184,65 @@ struct TaskNote: Identifiable, Hashable {
         self.authorName = authorName
         self.authorID = authorID
         self.createdAt = createdAt
+    }
+}
+
+// MARK: - SharedInfoItem
+
+/// A piece of shared reference information the household needs month to month —
+/// e.g. a utility (internet, gas, water) with its dashboard link, account number,
+/// and monthly price. This is reference data, not a task: nothing to complete.
+struct SharedInfoItem: Identifiable, Hashable {
+    var id: String              // recordName of the CKRecord
+    var title: String           // e.g. "Internet — Xfinity"
+    var detail: String          // free-form notes (login email, plan, etc.)
+    var link: String            // dashboard / account URL
+    var accountNumber: String   // account or customer number
+    var monthlyPrice: Double?   // recurring cost per month, if any
+    var sortIndex: Int
+
+    // Audit fields, mirroring tasks so each person can see who added what.
+    var createdByName: String
+    var createdByID: String
+    var lastModifiedByName: String
+    var createdAt: Date
+    var updatedAt: Date
+
+    static let recordType = "SharedInfoItem"
+
+    init(id: String = UUID().uuidString,
+         title: String,
+         detail: String = "",
+         link: String = "",
+         accountNumber: String = "",
+         monthlyPrice: Double? = nil,
+         sortIndex: Int = 0,
+         createdByName: String = "",
+         createdByID: String = "",
+         lastModifiedByName: String = "",
+         createdAt: Date = Date(),
+         updatedAt: Date = Date()) {
+        self.id = id
+        self.title = title
+        self.detail = detail
+        self.link = link
+        self.accountNumber = accountNumber
+        self.monthlyPrice = monthlyPrice
+        self.sortIndex = sortIndex
+        self.createdByName = createdByName
+        self.createdByID = createdByID
+        self.lastModifiedByName = lastModifiedByName
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
+    /// A normalized URL for the link, if it can be made into one.
+    /// Falls back to prepending https:// when the user typed a bare domain.
+    var url: URL? {
+        let trimmed = link.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if let u = URL(string: trimmed), u.scheme != nil { return u }
+        return URL(string: "https://\(trimmed)")
     }
 }
 

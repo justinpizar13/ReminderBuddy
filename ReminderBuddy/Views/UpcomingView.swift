@@ -64,12 +64,14 @@ struct UpcomingView: View {
                             TaskRow(task: task)
                         }
                         .swipeActions(edge: .leading) {
-                            Button {
-                                Task { await store.toggleComplete(task) }
-                            } label: {
-                                Label("Done", systemImage: "checkmark")
+                            if task.kind != .event {
+                                Button {
+                                    Task { await store.toggleComplete(task) }
+                                } label: {
+                                    Label("Done", systemImage: "checkmark")
+                                }
+                                .tint(.green)
                             }
-                            .tint(.green)
                         }
                         .swipeActions(edge: .trailing) {
                             Button(role: .destructive) {
@@ -92,9 +94,9 @@ struct UpcomingView: View {
         ContentUnavailableView {
             Label("Nothing Upcoming", systemImage: "calendar.badge.checkmark")
         } description: {
-            Text("You're all caught up. Tap + to add a reminder with a due date.")
+            Text("You're all caught up. Tap + to add a reminder or event with a date.")
         } actions: {
-            Button("Add Reminder") { showingAdd = true }
+            Button("Add Item") { showingAdd = true }
                 .buttonStyle(.borderedProminent)
         }
     }

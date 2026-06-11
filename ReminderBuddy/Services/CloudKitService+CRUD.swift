@@ -17,7 +17,7 @@ extension CloudKitService {
     /// queries this path requires **no Queryable indexes** in the CloudKit schema — which
     /// is why it avoids the "field 'recordName' is not marked queryable" failure in the
     /// locked Production environment.
-    func fetchAll() async throws -> (categories: [TaskCategory], tasks: [ReminderTask], notes: [TaskNote]) {
+    func fetchAll() async throws -> (categories: [TaskCategory], tasks: [ReminderTask], notes: [TaskNote], infoItems: [SharedInfoItem]) {
         let db = await activeDatabase()
         let zone = await activeZoneID()
         let records = try await fetchAllRecords(in: db, zone: zone)
@@ -29,8 +29,11 @@ extension CloudKitService {
         let notes = records
             .compactMap { TaskNote(record: $0) }
             .sorted { $0.createdAt < $1.createdAt }
+        let infoItems = records
+            .compactMap { SharedInfoItem(record: $0) }
+            .sorted { $0.sortIndex < $1.sortIndex }
 
-        return (categories, tasks, notes)
+        return (categories, tasks, notes, infoItems)
     }
 
     /// Fetches every record currently in the zone via the change-tracking API, following
@@ -82,6 +85,15 @@ extension CloudKitService {
         return TaskNote(record: saved) ?? note
     }
 
+    @discardableResult
+    func save(infoItem: SharedInfoItem) async throws -> SharedInfoItem {
+        let db = await activeDatabase()
+        let zone = await activeZoneID()
+        let record = try await mergedRecord(for: infoItem.toRecord(in: zone), in: db)
+        let saved = try await db.save(record)
+        return SharedInfoItem(record: saved) ?? infoItem
+    }
+
     // MARK: Delete
 
     func deleteTask(id: String) async throws {
@@ -92,6 +104,13 @@ extension CloudKitService {
     }
 
     func deleteCategory(id: String) async throws {
+        let db = await activeDatabase()
+        let zone = await activeZoneID()
+        let recordID = CKRecord.ID(recordName: id, zoneID: zone)
+        _ = try await db.modifyRecords(saving: [], deleting: [recordID])
+    }
+
+    func deleteInfoItem(id: String) async throws {
         let db = await activeDatabase()
         let zone = await activeZoneID()
         let recordID = CKRecord.ID(recordName: id, zoneID: zone)

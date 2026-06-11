@@ -11,6 +11,7 @@ final class TaskStore: ObservableObject {
     @Published private(set) var categories: [TaskCategory] = []
     @Published private(set) var tasks: [ReminderTask] = []
     @Published private(set) var notes: [TaskNote] = []
+    @Published private(set) var infoItems: [SharedInfoItem] = []
 
     @Published var isLoading = false
     @Published var errorMessage: String?
@@ -65,6 +66,7 @@ final class TaskStore: ObservableObject {
             categories = result.categories
             tasks = result.tasks.sorted(by: Self.taskSort)
             notes = result.notes
+            infoItems = result.infoItems.sorted { $0.sortIndex < $1.sortIndex }
             updateSnapshot()
             reconcileDueReminders()
             hasLoadedOnce = true
@@ -165,7 +167,8 @@ final class TaskStore: ObservableObject {
     /// App Group container and asks WidgetKit to refresh. Called whenever tasks change.
     func publishWidgetSnapshot(now: Date = Date(), calendar: Calendar = .current) {
         let relevant = tasks.filter { task in
-            guard !task.isComplete else { return false }
+            // The widget surfaces actionable reminders only, not events.
+            guard task.kind == .reminder, !task.isComplete else { return false }
             let group = DueGroup.group(for: task.dueDate, now: now)
             return group == .overdue || group == .today
         }
@@ -235,6 +238,10 @@ final class TaskStore: ObservableObject {
 
         for task in active {
             let group = DueGroup.group(for: task.dueDate, now: now)
+            // Events never complete, so a past event would otherwise linger as "Overdue"
+            // forever. Once an event's date has passed, drop it from Upcoming (it still
+            // shows on the Calendar for its day).
+            if task.kind == .event && group == .overdue { continue }
             if group == .noDate && !includeNoDate { continue }
             buckets[group, default: []].append(task)
         }
@@ -279,7 +286,8 @@ final class TaskStore: ObservableObject {
     /// Count of tasks that are overdue or due today — handy for a tab badge.
     func dueSoonCount(now: Date = Date()) -> Int {
         tasks.filter { task in
-            guard !task.isComplete else { return false }
+            // Only actionable reminders count toward the badge; events aren't "due".
+            guard task.kind == .reminder, !task.isComplete else { return false }
             let group = DueGroup.group(for: task.dueDate, now: now)
             return group == .overdue || group == .today
         }.count
@@ -289,6 +297,7 @@ final class TaskStore: ObservableObject {
 
     func addTask(title: String,
                  details: String,
+                 kind: ItemKind = .reminder,
                  dueDate: Date?,
                  categoryID: String?,
                  assignedTo: String?,
@@ -297,6 +306,7 @@ final class TaskStore: ObservableObject {
         let task = ReminderTask(
             title: title,
             details: details,
+            kind: kind,
             dueDate: dueDate,
             categoryID: categoryID,
             assignedTo: assignedTo,
@@ -325,6 +335,8 @@ final class TaskStore: ObservableObject {
 
     func toggleComplete(_ task: ReminderTask) async {
         guard let me else { return }
+        // Events aren't completable — they're just date-based things you're reminded of.
+        guard task.kind != .event else { return }
         var updated = task
         updated.isComplete.toggle()
         updated.completedByName = updated.isComplete ? me.displayName : nil
@@ -424,6 +436,53 @@ final class TaskStore: ObservableObject {
         }
     }
 
+    // MARK: Intents — shared info items
+
+    func addInfoItem(title: String,
+                     detail: String,
+                     link: String,
+                     accountNumber: String,
+                     monthlyPrice: Double?) async {
+        guard let me else { return }
+        let item = SharedInfoItem(
+            title: title,
+            detail: detail,
+            link: link,
+            accountNumber: accountNumber,
+            monthlyPrice: monthlyPrice,
+            sortIndex: infoItems.count,
+            createdByName: me.displayName,
+            createdByID: me.userID,
+            lastModifiedByName: me.displayName)
+        await mutate {
+            let saved = try await self.cloud.save(infoItem: item)
+            self.applyLocal(infoItem: saved)
+        }
+    }
+
+    func updateInfoItem(_ item: SharedInfoItem) async {
+        guard let me else { return }
+        var updated = item
+        updated.lastModifiedByName = me.displayName
+        updated.updatedAt = Date()
+        await mutate {
+            let saved = try await self.cloud.save(infoItem: updated)
+            self.applyLocal(infoItem: saved)
+        }
+    }
+
+    func deleteInfoItem(_ item: SharedInfoItem) async {
+        await mutate {
+            try await self.cloud.deleteInfoItem(id: item.id)
+            self.infoItems.removeAll { $0.id == item.id }
+        }
+    }
+
+    /// Total of all defined monthly prices across shared info items.
+    func monthlyInfoTotal() -> Double {
+        infoItems.compactMap(\.monthlyPrice).reduce(0, +)
+    }
+
     // MARK: Helpers
 
     private func applyLocal(task: ReminderTask) {
@@ -436,6 +495,15 @@ final class TaskStore: ObservableObject {
         updateSnapshot()
         rescheduleDailySummaries()
         publishWidgetSnapshot()
+    }
+
+    private func applyLocal(infoItem: SharedInfoItem) {
+        if let idx = infoItems.firstIndex(where: { $0.id == infoItem.id }) {
+            infoItems[idx] = infoItem
+        } else {
+            infoItems.append(infoItem)
+        }
+        infoItems.sort { $0.sortIndex < $1.sortIndex }
     }
 
     private func mutate(_ work: @escaping () async throws -> Void) async {
